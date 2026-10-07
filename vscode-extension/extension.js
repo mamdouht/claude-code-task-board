@@ -95,7 +95,8 @@ class TasksProvider {
     );
     // A new id per focus change lets VS Code apply the new expanded/collapsed default.
     item.id = `${session.sessionId}:${isFocused ? "f" : "c"}`;
-    const { done, total, finished } = session.summary;
+    // A session with no list of its own but a running subagent shows the subagent's progress.
+    const { done, total, finished } = model.primaryList(session)?.summary ?? session.summary;
     item.description = `${done}/${total}${finished ? " done" : ""} · ${model.relativeTime(session.updatedAt)}`;
     item.iconPath = new vscode.ThemeIcon(finished ? "pass" : isFocused ? "comment-discussion" : "history");
     item.tooltip = new vscode.MarkdownString(model.tooltipMarkdown(session));

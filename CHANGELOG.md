@@ -12,6 +12,8 @@ All notable changes to this project are documented in this file. The format foll
   not only `TodoWrite`.
 
 ### Fixed
+- VS Code extension 0.3.1: a session whose only list is a subagent's showed `0/0`; it now shows
+  the subagent's progress.
 - task-board failed to load on engines that do not know the `session.end` event
   ("`session.end` is not an event"); it now clears on `classic.SessionEnd`.
 

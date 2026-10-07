@@ -221,7 +221,9 @@ for a todo tool and found neither, so there was nothing to nest. In sessions whe
 Desktop app's Code tab; the chat panel runs the hooks but renders nothing for them. That gap is
 why the sidebar extension exists; use that instead.
 
-**The VS Code sidebar is empty.** Confirm task-tracker is installed (the extension only reads its
+**The VS Code sidebar is empty.** Sessions that were already open when task-tracker was installed
+record nothing until they run `/reload-plugins` (or restart), and a window keeps the extension
+version it loaded until **Developer: Reload Window**. Otherwise, confirm task-tracker is installed (the extension only reads its
 output, it generates nothing itself), that Node is resolvable by `plugins/task-tracker/run.sh`,
 and — if `claudeTasks.currentWorkspaceOnly` is on — that the session's working directory is
 actually inside an open workspace folder.

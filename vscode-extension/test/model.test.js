@@ -202,6 +202,11 @@ test("subagents: labelled by type, and a session with only a subagent list still
   assert.equal(model.subagentLabel(session.subagents[0]), "testing-playwright-jest (subagent)");
   assert.equal(model.subagentLabel({ agentId: "abcdef123456" }), "Subagent abcdef12");
   assert.equal(model.statusBarText(session), "$(hubot) $(checklist) 1/2 ▸ Running the suite");
+  assert.deepEqual(
+    [model.primaryList(session).summary.done, model.primaryList(session).summary.total],
+    [1, 2],
+    "the session row shows the subagent's progress, not 0/0",
+  );
   assert.match(model.tooltipMarkdown(session), /\*\*testing-playwright-jest \(subagent\)\*\* — 1\/2 done/);
 });
 
