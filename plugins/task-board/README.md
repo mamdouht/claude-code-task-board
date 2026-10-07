@@ -16,10 +16,11 @@ picture, including the VS Code sidebar companion.
 - A `/tasks` command that opens the same nested outline in a pane beside the transcript, already
   fully expanded.
 
-It needs nothing else to work — no settings, no config file. It reads the `TodoWrite` tool call
-directly (`tool.call`), keys a subagent's list by its own `agentId`, and keeps everything in
-plugin state that survives a hot reload. A subagent's list is removed the moment
-`classic.SubagentStop` fires for it; `/clear` (`session.end`) clears the board entirely.
+It needs nothing else to work — no settings, no config file. It reads the task tool calls
+directly (`tool.call`): `TodoWrite` (whole list per call) and `TaskCreate`/`TaskUpdate` (one task
+per call — what the Desktop app uses). It keys a subagent's list by its own `agentId` and keeps
+everything in plugin state that survives a hot reload. A subagent's list is removed the moment
+`classic.SubagentStop` fires for it; `/clear` or exit (`classic.SessionEnd`) clears the board.
 
 ## Install
 

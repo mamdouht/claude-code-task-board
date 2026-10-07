@@ -5,8 +5,11 @@
 //   every task, subagent tasks indented under their agent.
 // - /tasks opens the same nested list in a pane beside the transcript.
 //
-// Source of truth is the TodoWrite tool call itself (a subagent's call carries its agentId), so
-// this mod needs no settings hook. A subagent's list goes when classic.SubagentStop fires for it.
+// Source of truth is the task tool calls themselves (a subagent's call carries its agentId), so
+// this mod needs no settings hook. Two tool families write lists: TodoWrite (whole list per call;
+// what the VS Code extension's Claude uses) and TaskCreate/TaskUpdate (one task per call; what
+// the Desktop app and the terminal use when the Task tools are on). A subagent's list goes when classic.SubagentStop fires for it,
+// and everything goes on classic.SessionEnd (/clear or exit).
 // Drawing shows in the terminal and the Desktop app's Code tab; the VS Code chat panel runs the
 // hooks but draws nothing (the claude-task-panel extension covers VS Code).
 
@@ -27,11 +30,47 @@ const MARK = { completed: '✓', in_progress: '▸', pending: '○' } as const
 
 export function toTasks(todos: unknown): Task[] {
   if (!Array.isArray(todos)) return []
-  return todos.map(todo => ({
+  return todos.map((todo, i) => ({
+    id: String(i + 1),
     content: String(todo?.content ?? ''),
     activeForm: String(todo?.activeForm ?? todo?.content ?? ''),
     status: todo?.status === 'completed' || todo?.status === 'in_progress' ? todo.status : 'pending',
   }))
+}
+
+function asStatus(value: unknown): Task['status'] | undefined {
+  return value === 'pending' || value === 'in_progress' || value === 'completed' ? value : undefined
+}
+
+// TaskCreate: { subject, description, activeForm } in, { task: { id } } out (seen in a real
+// Desktop-app transcript, Claude Code 2.1.280).
+export function applyTaskCreate(tasks: Task[], args: Record<string, unknown>, id: string | undefined): Task[] {
+  const taskId = id ?? String(tasks.length + 1)
+  const content = String(args.subject ?? args.content ?? '')
+  const task: Task = {
+    id: taskId,
+    content,
+    activeForm: String(args.activeForm ?? content),
+    status: asStatus(args.status) ?? 'pending',
+  }
+  return [...tasks.filter(t => t.id !== taskId), task]
+}
+
+// TaskUpdate: { taskId, status?, subject?, activeForm? }; status "deleted" removes the task.
+export function applyTaskUpdate(tasks: Task[], args: Record<string, unknown>): Task[] {
+  const taskId = args.taskId === undefined ? undefined : String(args.taskId)
+  if (taskId === undefined) return tasks
+  if (args.status === 'deleted') return tasks.filter(t => t.id !== taskId)
+  return tasks.map(t =>
+    t.id !== taskId
+      ? t
+      : {
+          ...t,
+          content: args.subject === undefined ? t.content : String(args.subject),
+          activeForm: args.activeForm === undefined ? t.activeForm : String(args.activeForm),
+          status: asStatus(args.status) ?? t.status,
+        },
+  )
 }
 
 export function summary(tasks: Task[]) {
@@ -89,14 +128,35 @@ export const register: Register = on => {
     return { text: 'Tasks pane opened.' }
   })
 
-  // Record every TodoWrite, keyed by the loop that made it. Recorded before the tool runs, so
-  // the band changes the moment Claude updates its plan.
-  on('tool.call', { tool: 'TodoWrite' }, async ($, e, next) => {
+  // Record every task-list write, keyed by the loop that made it. TodoWrite is recorded before
+  // the tool runs, so the band changes the moment Claude updates its plan; TaskCreate after, since
+  // the new task's id comes back in the result. Branches on e.tool by name: the Task tools are
+  // absent from a session's typed tool table whenever they are switched off there.
+  on('tool.call', async ($, e, next) => {
+    const tool: string = e.tool
+    if (tool !== 'TodoWrite' && tool !== 'TaskCreate' && tool !== 'TaskUpdate') return next(e)
     const key = e.agentId ?? 'main'
-    const tasks = toTasks(e.todos)
-    await update($, lists, all => ({ ...all, [key]: tasks }))
-    $.ui.invalidate('ui.render')
-    return next(e)
+    const args = e as unknown as Record<string, unknown>
+
+    if (tool === 'TodoWrite') {
+      const tasks = toTasks(args.todos)
+      await update($, lists, all => ({ ...all, [key]: tasks }))
+      $.ui.invalidate('ui.render')
+      return next(e)
+    }
+
+    const ran = await next(e)
+    if (!('deny' in ran && ran.deny) && !ran.isError) {
+      const output = ran.result as { task?: { id?: unknown } } | undefined
+      const createdId = output?.task?.id === undefined ? undefined : String(output.task.id)
+      await update($, lists, all => {
+        const before = all[key] ?? []
+        const after = tool === 'TaskCreate' ? applyTaskCreate(before, args, createdId) : applyTaskUpdate(before, args)
+        return { ...all, [key]: after }
+      })
+      $.ui.invalidate('ui.render')
+    }
+    return ran
   })
 
   on('classic.SubagentStart', async ($, e, next) => {
@@ -118,8 +178,10 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // A /clear starts a fresh session: its old plan should not linger.
-  on('session.end', async ($, e, next) => {
+  // A /clear (or exit) ends this session: its plan should not linger. classic.SessionEnd rather
+  // than session.end, which older engines (seen on 2.1.273 and in a live 2.1.28x session) refuse
+  // as "not an event", failing the whole module.
+  on('classic.SessionEnd', async ($, e, next) => {
     await update($, lists, () => ({}))
     await update($, agents, () => ({}))
     return next(e)

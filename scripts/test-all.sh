@@ -6,6 +6,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 echo "== task-tracker (node --test)";      node --test plugins/task-tracker/test/
 echo "== vscode-extension (node --test)";  node --test vscode-extension/test/
+echo "== statusline (bash)";                statusline/test/run.sh
 
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 version="$("$CLAUDE_BIN" --version 2>/dev/null | awk '{print $1}' || true)"

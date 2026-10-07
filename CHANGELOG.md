@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- **statusline**: standalone status line (`statusline/task-statusline.sh`, bash 3.2+, no plugin or
+  node) with `install.sh` (`--force`, `--uninstall`). Reads the session transcript directly.
+- task-board mod and status line read `TaskCreate`/`TaskUpdate` (the Desktop app's task tools),
+  not only `TodoWrite`.
+
+### Fixed
+- task-board failed to load on engines that do not know the `session.end` event
+  ("`session.end` is not an event"); it now clears on `classic.SessionEnd`.
+
 ## [0.1.0] - 2026-10-07
 
 Initial public release.

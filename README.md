@@ -18,15 +18,16 @@ the plans of subagents working in the background.
 
 ## What's in the box
 
-Three independent components, installed separately, each solving one part of "where do I see this":
+Four independent components, installed separately, each solving one part of "where do I see this":
 
 | Component | What it is | Where it shows |
 |---|---|---|
 | **task-board** | A Claude Code *mod* — in-process function hooks (`plugins/task-board/hooks/register.tsx`) | A band above the prompt, plus a `/tasks` pane. **Terminal only** (including VS Code's and JetBrains' integrated terminals) and the Claude Desktop app's Code tab. |
 | **task-tracker** | A Claude Code *plugin* — classic settings hooks (`plugins/task-tracker/hooks/hooks.json`) | Nowhere by itself. It writes each session's task list to `~/.claude/task-tracker/<session_id>.json` so something else can read it. |
+| **statusline** | A standalone bash script (`statusline/task-statusline.sh`) + `install.sh` | Claude Code's status line: `Opus 5.5 · my-repo · ✓ 3/7 ▸ Writing the hook`. Terminal. Needs no plugin and no node — it reads the session transcript directly. |
 | **vscode-extension** ("Task Board for Claude Code") | A standalone VS Code extension (`vscode-extension/`) | A "Claude Tasks" sidebar view and a status bar item. Reads task-tracker's files — **requires task-tracker to be installed too.** |
 
-You can install task-board on its own for terminal/Desktop use. The VS Code sidebar needs both
+You can install task-board or the status line on their own for terminal/Desktop use. The VS Code sidebar needs both
 task-tracker (to produce the data) and the extension (to display it).
 
 ## Requirements
@@ -37,7 +38,9 @@ task-tracker (to produce the data) and the extension (to display it).
   node → the hook quietly does nothing; nothing breaks, but no state files get written.
 - **VS Code 1.90+** for the vscode-extension.
 - On Claude 5 models, Claude Code's `TodoWrite` tool is **off by default** — nothing here has
-  anything to show until it's turned on (see Install, step 2).
+  anything to show until it's turned on (see Install, step 2). Where Claude Code uses the newer
+  **Task tools** instead (`TaskCreate`/`TaskUpdate` — the Desktop app does), everything here reads
+  those too.
 
 ## Install
 
@@ -100,7 +103,16 @@ task-tracker (to produce the data) and the extension (to display it).
    keep exactly one item in_progress; mark each completed as soon as it's done.
    ```
 
-   Subagents pick up `TodoWrite` too, so delegated work shows up nested automatically.
+   Subagents pick up `TodoWrite` too, so delegated work shows up nested automatically — where a
+   subagent has a task tool at all (see the Desktop note under Troubleshooting).
+
+7. **Optional — the status line.** Independent of everything above (no plugin, no node):
+
+   ```bash
+   ./statusline/install.sh              # copies the script to ~/.claude/statusline/ and sets statusLine
+   ./statusline/install.sh --force      # replace a status line you already have (backup kept)
+   ./statusline/install.sh --uninstall
+   ```
 
 ## Usage
 
@@ -194,6 +206,17 @@ will disagree about where the files live.
 that Claude actually used `TodoWrite` for this task — a one- or two-step request often won't
 trigger it. The CLAUDE.md instruction in step 6 fixes that last one.
 
+**In the Desktop app I only see the built-in "Plan → Tasks" pane, not the band.** That pane is the
+Desktop app's own and shows the main list only. The task-board band sits above the prompt and needs
+the Desktop app's bundled Claude Code to be **2.1.286+** (a 2.1.280 Desktop build was seen without
+it; check with `/status`). The Desktop app uses `TaskCreate`/`TaskUpdate` rather than `TodoWrite`;
+the band, the status line and task-tracker all read both.
+
+**My subagent's tasks don't appear nested.** A subagent can only report a list if it has a task
+tool. In a Desktop-app session on 2.1.280 the subagent searched for `TaskCreate`/`TaskUpdate` and
+for a todo tool and found neither, so there was nothing to nest. In sessions where subagents get
+`TodoWrite` (verified in the VS Code extension and the CLI with the env flag), nesting works.
+
 **Nothing shows in VS Code's built-in chat panel.** Expected — mods only draw in a terminal or the
 Desktop app's Code tab; the chat panel runs the hooks but renders nothing for them. That gap is
 why the sidebar extension exists; use that instead.
@@ -229,10 +252,12 @@ Read this before relying on any of it for something important:
   matching falls back to "the newest unfinished session" — usually right, not guaranteed.
 - If a PID gets reused by an unrelated process after a session ends, a stale list can survive
   until the idle-hide window (default 24 hours via `maxAgeHours`) closes it.
-- `task-tracker`'s handling of `TaskCreate`/`TaskUpdate` payloads is **best-effort**: those field
-  names were never observed in a real transcript when this was written, so several candidate
-  field names are tried defensively. `TodoWrite` — the common path — is fully specified and
-  reliable.
+- `TaskCreate`/`TaskUpdate` support is built from one real Desktop-app transcript (Claude Code
+  2.1.280): create takes `{subject, description, activeForm}` and returns `{task: {id}}`; update
+  takes `{taskId, status}` (`deleted` removes). Other versions may differ; task-tracker also tries
+  a few alternative field names defensively.
+- The status line parses JSON with grep/awk, assuming Claude Code's key order for todo items
+  (`content`, `status`, `activeForm`) — true in every transcript examined, not guaranteed.
 - The mod API (`claude-code` mods) is early access; expect its own breaking changes upstream.
 - The vscode-extension has been tested on macOS and Linux. Windows is untested.
 - Everything stays local. State files contain your task text in plain JSON on disk — nothing is
@@ -245,9 +270,10 @@ scripts/test-all.sh
 ```
 
 Runs, in order: `node --test` for task-tracker's hook, `node --test` for the vscode-extension's
-model layer, then — only if a `claude` CLI ≥ 2.1.287 is on `PATH` (override with `CLAUDE_BIN`) —
+model layer, `statusline/test/run.sh` (plain bash), then — only if a `claude` CLI ≥ 2.1.287 is on `PATH` (override with `CLAUDE_BIN`) —
 `claude plugin validate` on the marketplace root and both plugins, and `claude plugin test` for
-the task-board mod. CI (`.github/workflows/test.yml`) runs only the two `node --test` suites;
+the task-board mod. CI (`.github/workflows/test.yml`) runs the two `node --test` suites and the
+status-line tests;
 the plugin-validation and mod-test steps need the Claude Code CLI and are local-only for now.
 
 | Path | Role |
@@ -256,6 +282,7 @@ the plugin-validation and mod-test steps need the Claude Code CLI and are local-
 | `plugins/task-board/` | The mod: `hooks/register.tsx` (logic + UI), `hooks/hooks.json`, `types/index.d.ts`, `tests/`. |
 | `plugins/task-tracker/` | The plugin: `hooks/hooks.json`, `hook/task-tracker-hook.mjs` (entry point), `lib/state.mjs` (state file contract), `run.sh` (node launcher), `test/`. |
 | `vscode-extension/` | The extension: `extension.js` (VS Code glue), `lib/model.js` (pure, unit-tested data layer), `package.json`, `test/`, `media/`. |
+| `statusline/` | `task-statusline.sh` (the status line), `install.sh`, `test/run.sh`. |
 | `scripts/` | `enable-todo-tool.sh`, `test-all.sh`. |
 | `docs/how-it-works.md` | The state file contract and design rationale, for contributors. |
 | `docs/release-notes/` | Dated release notes. |

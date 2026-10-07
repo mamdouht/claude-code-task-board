@@ -16,5 +16,7 @@ jobs:
         run: node --test plugins/task-tracker/test/
       - name: VS Code extension tests
         run: node --test vscode-extension/test/
+      - name: Status line tests
+        run: statusline/test/run.sh
   # The mod's own tests and `claude plugin validate` need the Claude Code CLI (>= 2.1.287);
   # run scripts/test-all.sh locally for those.

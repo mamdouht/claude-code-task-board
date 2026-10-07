@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { outline, toTasks } from '../hooks/register'
+import { applyTaskCreate, applyTaskUpdate, outline, toTasks } from '../hooks/register'
 
 const BAND = {
   component: 'AbovePrompt' as const,
@@ -39,6 +39,22 @@ describe('outline', () => {
   })
 })
 
+describe('Task tools (TaskCreate / TaskUpdate)', () => {
+  test('create, update and delete with the payload shapes seen in a real transcript', async () => {
+    let tasks = applyTaskCreate([], { subject: 'Survey', description: 'ls', activeForm: 'Surveying' }, '1')
+    tasks = applyTaskCreate(tasks, { subject: 'Delegate', activeForm: 'Delegating' }, '2')
+    tasks = applyTaskUpdate(tasks, { taskId: '1', status: 'completed' })
+    tasks = applyTaskUpdate(tasks, { taskId: '2', status: 'in_progress' })
+    expect(tasks.map(t => [t.id, t.content, t.status])).toEqual([
+      ['1', 'Survey', 'completed'],
+      ['2', 'Delegate', 'in_progress'],
+    ])
+    expect(outline({ main: tasks }, {}, false)[0]?.text).toBe('Tasks 1/2 ▸ Delegating')
+    expect(applyTaskUpdate(tasks, { taskId: '2', status: 'deleted' }).length).toBe(1)
+    expect(applyTaskUpdate(tasks, { status: 'completed' })).toEqual(tasks)
+  })
+})
+
 describe('band', () => {
   test('a TodoWrite call draws the plan above the prompt; a subagent nests; its stop removes it', async ($, on) => {
     // Stands in for the engine's own band, which the mod falls through to when it has no list.
@@ -47,7 +63,9 @@ describe('band', () => {
       return <Box key="engine-band" />
     })
     // Stands in for the tool itself; the mod records the list before it runs.
-    on('tool.call', async () => ({ result: { text: 'ok' } }) as never)
+    let created = 0
+    on('tool.call', async (_$, e) =>
+      ({ result: (e.tool as string) === 'TaskCreate' ? { task: { id: String(++created) } } : { text: 'ok' } }) as never)
     // Stand in for the settings hooks a session would run on these events (none configured).
     on('classic.SubagentStart', async () => ({}) as never)
     on('classic.SubagentStop', async () => ({}) as never)
@@ -82,5 +100,12 @@ describe('band', () => {
     expect(await after.find({ type: 'Text', text: /Explore/ })).toBeUndefined()
     expect(await after.find({ type: 'Text', text: /Tasks 1\/3/ })).toBeDefined()
     await after.unmount()
+
+    // The Task tools (Desktop app) replace the list the same way, one task per call.
+    await $.tool.call({ tool: 'TaskCreate', subject: 'Survey', description: 'ls', activeForm: 'Surveying' } as never)
+    await $.tool.call({ tool: 'TaskUpdate', taskId: '1', status: 'in_progress' } as never)
+    const tasks = await $.ui.mount({ plugin: 'task-board', surface: 'terminal', ...BAND })
+    expect(await tasks.find({ type: 'Text', text: /Surveying/ })).toBeDefined()
+    await tasks.unmount()
   })
 })

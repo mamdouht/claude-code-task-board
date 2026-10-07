@@ -73,8 +73,13 @@ reading this to understand why that check exists and looks dead: that's why.
   where the label (`testing-playwright-jest`, etc.) gets attached to its id.
 - `classic.SubagentStop` — the subagent's list is scoped to its own lifetime; once it stops, its
   row should disappear even if the session's own list lives on.
-- `session.end` — a `/clear` starts a logically new session; a stale plan from before the clear
-  would be actively misleading, so everything is wiped.
+- `classic.SessionEnd` — a `/clear` starts a logically new session; a stale plan from before the
+  clear would be actively misleading, so everything is wiped. (Not the mod-native `session.end`:
+  some engines reject it as "not an event", which fails the whole module.)
+- `TaskCreate`/`TaskUpdate` are handled alongside `TodoWrite`: the Desktop app uses them. Create is
+  recorded after the tool runs, because the new task's id comes back in the result
+  (`result.task.id`); the hook branches on `e.tool` by name, since these tools are missing from a
+  session's typed tool table whenever they are switched off there.
 - No settings hook, no plugin configuration file. The mod needs nothing external — it only ever
   reads events it's handed.
 
@@ -134,12 +139,13 @@ than failing loudly.
 
 ## Open questions and known gaps
 
-- **`TaskCreate`/`TaskUpdate` payload shapes were never observed in a real transcript** when
-  `task-tracker` was written — only `TodoWrite`'s shape (`{ todos: [...] }`) was confirmed live.
-  `lib/state.mjs`'s `applyTaskCreate`/`applyTaskUpdate` try several plausible field names
-  (`subject`, `content`, `title`, `description`; `response?.task?.id`, `response?.taskId`, …) and
-  fall back gracefully rather than asserting a shape. Treat that path as best-effort; `TodoWrite`
-  is the one with confidence behind it.
+- **`TaskCreate`/`TaskUpdate` shapes come from one real transcript** (Desktop app, Claude Code
+  2.1.280): create `{ subject, description, activeForm }` → result `{ task: { id, subject } }`;
+  update `{ taskId, status }`, with `status: "deleted"` removing the task. `lib/state.mjs` also
+  tries alternative field names in case other versions differ.
+- **Subagents without a task tool**: in that same Desktop session the subagent looked for
+  `TaskCreate`/`TaskUpdate` and a todo tool and found neither, so it could not report a list.
+  Nesting depends on Claude Code giving subagents a task tool.
 - **Plugin naming**: names starting with `claude-` are reserved by Claude Code's plugin system,
   which is why this suite is `task-board` / `task-tracker` / `task-board-suite` rather than
   anything prefixed `claude-`.
