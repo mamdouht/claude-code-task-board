@@ -1,0 +1,17 @@
+{
+  "name": "task-board-suite",
+  "owner": { "name": "Mamdouh", "email": "mamdouh@opstudioz.com" },
+  "metadata": { "description": "See Claude Code's task lists — and every subagent's — while it works." },
+  "plugins": [
+    {
+      "name": "task-board",
+      "source": "./plugins/task-board",
+      "description": "Mod: Claude's task list with each subagent's nested under it, in a band above the prompt and a /tasks pane (terminal, Desktop app)."
+    },
+    {
+      "name": "task-tracker",
+      "source": "./plugins/task-tracker",
+      "description": "Hooks: records each session's task lists to ~/.claude/task-tracker/ for the Task Board VS Code extension."
+    }
+  ]
+}

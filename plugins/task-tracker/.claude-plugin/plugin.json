@@ -1,0 +1,8 @@
+{
+  "name": "task-tracker",
+  "version": "0.1.0",
+  "description": "Records Claude Code's per-session task lists (TodoWrite, subagents included) to ~/.claude/task-tracker/ for viewers such as the Task Board VS Code extension.",
+  "author": { "name": "Mamdouh", "email": "mamdouh@opstudioz.com" },
+  "license": "MIT",
+  "keywords": ["tasks", "todo", "hooks", "subagents"]
+}

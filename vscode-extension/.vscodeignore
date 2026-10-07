@@ -1,0 +1,4 @@
+test/**
+dist/**
+# Repo docs with relative links vsce cannot resolve; not needed inside the .vsix.
+README.md

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.vsix
+.DS_Store
+# Laid by Claude Code when it loads a mod from this folder (editor types, regenerated each load)
+plugins/*/.claude-plugin/types/
+plugins/*/tsconfig.json

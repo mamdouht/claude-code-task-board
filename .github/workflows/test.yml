@@ -1,0 +1,20 @@
+name: test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: task-tracker hook tests
+        run: node --test plugins/task-tracker/test/
+      - name: VS Code extension tests
+        run: node --test vscode-extension/test/
+  # The mod's own tests and `claude plugin validate` need the Claude Code CLI (>= 2.1.287);
+  # run scripts/test-all.sh locally for those.

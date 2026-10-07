@@ -1,0 +1,106 @@
+{
+  "name": "task-board-vscode",
+  "displayName": "Task Board for Claude Code",
+  "description": "Shows Claude Code's task lists — and each subagent's, nested — in a sidebar view and the status bar, beside the Claude chat panel.",
+  "version": "0.3.0",
+  "publisher": "opstudioz",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "scripts": {
+    "test": "node --test test/",
+    "package": "npx --yes @vscode/vsce@3 package --no-dependencies --allow-missing-repository --readme-path media/vsix-readme.md -o dist/task-board-vscode.vsix"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claudeTasks",
+          "title": "Claude Tasks",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "claudeTasks": [
+        {
+          "id": "claudeTasks.list",
+          "name": "Tasks",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "claudeTasks.refresh",
+        "title": "Refresh",
+        "category": "Claude Tasks",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "claudeTasks.focus",
+        "title": "Show Task List",
+        "category": "Claude Tasks"
+      },
+      {
+        "command": "claudeTasks.toggleWorkspaceFilter",
+        "title": "Toggle: Current Workspace Only",
+        "category": "Claude Tasks",
+        "icon": "$(filter)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "claudeTasks.toggleWorkspaceFilter",
+          "when": "view == claudeTasks.list",
+          "group": "navigation@1"
+        },
+        {
+          "command": "claudeTasks.refresh",
+          "when": "view == claudeTasks.list",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Claude Tasks",
+      "properties": {
+        "claudeTasks.currentWorkspaceOnly": {
+          "type": "boolean",
+          "default": true,
+          "description": "Only show sessions whose working directory is inside an open workspace folder."
+        },
+        "claudeTasks.maxAgeHours": {
+          "type": "number",
+          "default": 24,
+          "description": "Hide sessions whose task list has not changed for this many hours (0 = never hide)."
+        },
+        "claudeTasks.stateDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory of task-tracker state files. Empty = ~/.claude/task-tracker."
+        }
+      }
+    }
+  },
+  "author": {
+    "name": "Mamdouh",
+    "email": "mamdouh@opstudioz.com"
+  },
+  "keywords": [
+    "claude",
+    "claude code",
+    "tasks",
+    "todo",
+    "ai agents"
+  ]
+}
