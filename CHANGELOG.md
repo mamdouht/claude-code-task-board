@@ -12,6 +12,8 @@ All notable changes to this project are documented in this file. The format foll
   not only `TodoWrite`.
 
 ### Fixed
+- task-board's pane command is now `/task-board`: `/tasks` is Claude Code's built-in
+  background-task view, which takes precedence, so the mod's pane could not be opened.
 - VS Code extension 0.3.2: when a session's tracker file has no main list (the plan was written
   before the task-tracker hooks loaded in that session), the main list is rebuilt from the session
   transcript, so it shows above its subagents.

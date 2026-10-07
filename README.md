@@ -22,7 +22,7 @@ Four independent components, installed separately, each solving one part of "whe
 
 | Component | What it is | Where it shows |
 |---|---|---|
-| **task-board** | A Claude Code *mod* — in-process function hooks (`plugins/task-board/hooks/register.tsx`) | A band above the prompt, plus a `/tasks` pane. **Terminal only** (including VS Code's and JetBrains' integrated terminals) and the Claude Desktop app's Code tab. |
+| **task-board** | A Claude Code *mod* — in-process function hooks (`plugins/task-board/hooks/register.tsx`) | A band above the prompt, plus a `/task-board` pane. **Terminal only** (including VS Code's and JetBrains' integrated terminals) and the Claude Desktop app's Code tab. |
 | **task-tracker** | A Claude Code *plugin* — classic settings hooks (`plugins/task-tracker/hooks/hooks.json`) | Nowhere by itself. It writes each session's task list to `~/.claude/task-tracker/<session_id>.json` so something else can read it. |
 | **statusline** | A standalone bash script (`statusline/task-statusline.sh`) + `install.sh` | Claude Code's status line: `Opus 5.5 · my-repo · ✓ 3/7 ▸ Writing the hook`. Terminal. Needs no plugin and no node — it reads the session transcript directly. |
 | **vscode-extension** ("Task Board for Claude Code") | A standalone VS Code extension (`vscode-extension/`) | A "Claude Tasks" sidebar view and a status bar item. Reads task-tracker's files — **requires task-tracker to be installed too.** |
@@ -120,9 +120,9 @@ task-tracker (to produce the data) and the extension (to display it).
 Claude writes a task list — `Tasks 3/7 ▸ <current step>`. Each subagent running in the background
 gets its own nested line, `↳ <agent-type> 1/2 ▸ <step>`, as soon as it starts. The band carries a
 **Show all** button that expands every task in every list (subagent tasks indented one level
-deeper than their header); it becomes **Collapse** once expanded. `/tasks` opens the same nested
+deeper than their header); it becomes **Collapse** once expanded. `/task-board` opens the same nested
 outline in a pane beside the transcript, already fully expanded — useful once the band's row cap
-hides something ("… N more (/tasks)").
+hides something ("… N more (/task-board)").
 
 **In VS Code:** open the **Claude Tasks** icon in the activity bar. It lists every session with an
 active task list — the one matching your focused Claude chat tab on top and expanded, the rest
@@ -150,7 +150,7 @@ flowchart LR
     subgraph proc["claude process (terminal / Desktop Code tab)"]
         TW[TodoWrite tool call]
         MOD["task-board mod<br/>(in-process hook)"]
-        BAND["Band above prompt<br/>+ /tasks pane"]
+        BAND["Band above prompt<br/>+ /task-board pane"]
         TW -->|tool.call event| MOD --> BAND
     end
 
@@ -205,6 +205,12 @@ will disagree about where the files live.
 `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set if you're on a Claude 5 model (step 2 above), and check
 that Claude actually used `TodoWrite` for this task — a one- or two-step request often won't
 trigger it. The CLAUDE.md instruction in step 6 fixes that last one.
+
+**I see no band in a new session.** It appears only once Claude writes a task list (TodoWrite or
+TaskCreate) in that session; an empty board draws nothing. Ask for multi-step work, or open the
+pane with `/task-board`. If `/task-board` is not offered as a command, the mod did not load: run
+`/plugin` and check the dim line under the tabs (`1 mod active · task-board`), and `claude
+--version` (2.1.287+).
 
 **In the Desktop app I only see the built-in "Plan → Tasks" pane, not the band.** That pane is the
 Desktop app's own and shows the main list only. The task-board band sits above the prompt and needs

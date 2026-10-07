@@ -3,7 +3,7 @@
 // - A band above the prompt: one line per list — the session's own plan, and each running
 //   subagent's nested under it — with done/total and the step in progress. "Show all" expands
 //   every task, subagent tasks indented under their agent.
-// - /tasks opens the same nested list in a pane beside the transcript.
+// - /task-board opens (not /tasks: that name is Claude Code's built-in background-task view) the same nested list in a pane beside the transcript.
 //
 // Source of truth is the task tool calls themselves (a subagent's call carries its agentId), so
 // this mod needs no settings hook. Two tool families write lists: TodoWrite (whole list per call;
@@ -126,11 +126,11 @@ export function outline(all: TaskLists, meta: AgentMeta, isFull: boolean): Row[]
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'tasks', description: "Show Claude's task lists in a pane" })
+    await $.command.register({ name: 'task-board', description: "Show Claude's task lists (and subagents') in a pane" })
     return next(e)
   })
 
-  on('command.run', { command: 'tasks' }, async $ => {
+  on('command.run', { command: 'task-board' }, async $ => {
     await $.ui.open({ id: PANE, title: 'Tasks' })
     return { text: 'Tasks pane opened.' }
   })
@@ -219,7 +219,7 @@ export const register: Register = on => {
           </Box>
         ))}
         <Box>
-          {hidden > 0 && <Text dimColor>… {hidden} more (/tasks) </Text>}
+          {hidden > 0 && <Text dimColor>… {hidden} more (/task-board) </Text>}
           <Button
             key="toggle"
             label={full ? 'Collapse' : 'Show all'}

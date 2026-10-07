@@ -6,7 +6,7 @@
     {
       "name": "task-board",
       "source": "./plugins/task-board",
-      "description": "Mod: Claude's task list with each subagent's nested under it, in a band above the prompt and a /tasks pane (terminal, Desktop app)."
+      "description": "Mod: Claude's task list with each subagent's nested under it, in a band above the prompt and a /task-board pane (terminal, Desktop app)."
     },
     {
       "name": "task-tracker",

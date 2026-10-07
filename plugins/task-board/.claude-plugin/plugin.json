@@ -1,7 +1,7 @@
 {
   "name": "task-board",
   "version": "0.1.0",
-  "description": "Shows Claude's task list (and each subagent's, nested) in a band above the prompt and a /tasks pane.",
+  "description": "Shows Claude's task list (and each subagent's, nested) in a band above the prompt and a /task-board pane.",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Mamdouh",

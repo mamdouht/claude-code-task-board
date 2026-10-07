@@ -13,7 +13,7 @@ picture, including the VS Code sidebar companion.
   `↳ <agent-type> 1/2 ▸ <step>`.
 - A **Show all** / **Collapse** toggle on that band that expands every task in every list
   (subagent tasks indented one level deeper than their header row).
-- A `/tasks` command that opens the same nested outline in a pane beside the transcript, already
+- A `/task-board` command that opens the same nested outline in a pane beside the transcript, already
   fully expanded.
 
 It needs nothing else to work — no settings, no config file. It reads the task tool calls
