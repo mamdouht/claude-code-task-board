@@ -14,6 +14,8 @@ const LEGACY_IDLE_MS = 60 * 60 * 1000;
 // and Claude Code updating its registry entry.
 const REMOVE_GRACE_MS = 60 * 1000;
 const titleCache = new Map(); // transcriptPath -> { size, title }
+const PLAN_TAIL_BYTES = 4 * 1024 * 1024;
+const planCache = new Map(); // transcriptPath -> { size, tasks }
 
 function defaultStateDir() {
   return path.join(os.homedir(), ".claude", "task-tracker");
@@ -53,6 +55,103 @@ function readSessionTitle(transcriptPath) {
   }
   titleCache.set(transcriptPath, { size, title });
   return title;
+}
+
+function readTail(file, bytes) {
+  const size = fs.statSync(file).size;
+  const fd = fs.openSync(file, "r");
+  try {
+    const length = Math.min(size, bytes);
+    const buffer = Buffer.alloc(length);
+    fs.readSync(fd, buffer, 0, length, size - length);
+    return { size, text: buffer.toString("utf8") };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+const STATUSES = new Set(["pending", "in_progress", "completed"]);
+const asStatus = (v) => (STATUSES.has(v) ? v : undefined);
+
+// Rebuilds the session's OWN plan (main loop only) from its transcript: the latest TodoWrite list,
+// or the TaskCreate/TaskUpdate history, whichever was written last. Used when the tracker file has
+// no main list — e.g. the plan was written before the task-tracker hooks loaded in that session.
+// Subagent lines (isSidechain: true) are skipped; their lists come from the tracker file.
+function readPlanFromTranscript(transcriptPath) {
+  if (!transcriptPath) return [];
+  let tail;
+  try {
+    const size = fs.statSync(transcriptPath).size;
+    const cached = planCache.get(transcriptPath);
+    if (cached && cached.size === size) return cached.tasks;
+    tail = readTail(transcriptPath, PLAN_TAIL_BYTES);
+  } catch {
+    return [];
+  }
+
+  let todo = null; // latest TodoWrite list
+  let todoAt = -1;
+  let tasks = []; // Task-tool replay
+  let taskAt = -1;
+  const pendingCreates = new Map(); // tool_use id -> input
+  const lines = tail.text.split("\n");
+  lines.forEach((line, index) => {
+    if (!/TodoWrite|TaskCreate|TaskUpdate|toolUseResult|Task #/.test(line)) return;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      return; // the first line of a tail is usually cut
+    }
+    if (row.isSidechain) return;
+    const content = Array.isArray(row.message?.content) ? row.message.content : [];
+    for (const block of content) {
+      if (block?.type === "tool_use" && block.name === "TodoWrite" && Array.isArray(block.input?.todos)) {
+        todo = block.input.todos.map((t, i) => ({
+          id: String(i + 1),
+          content: String(t.content ?? ""),
+          activeForm: t.activeForm ? String(t.activeForm) : undefined,
+          status: asStatus(t.status) ?? "pending",
+        }));
+        todoAt = index;
+      } else if (block?.type === "tool_use" && block.name === "TaskCreate") {
+        pendingCreates.set(block.id, block.input ?? {});
+        taskAt = index;
+      } else if (block?.type === "tool_use" && block.name === "TaskUpdate") {
+        const input = block.input ?? {};
+        const id = input.taskId === undefined ? undefined : String(input.taskId);
+        taskAt = index;
+        if (id === undefined) continue;
+        if (input.status === "deleted") tasks = tasks.filter((t) => t.id !== id);
+        else
+          tasks = tasks.map((t) =>
+            t.id !== id
+              ? t
+              : {
+                  ...t,
+                  content: input.subject === undefined ? t.content : String(input.subject),
+                  activeForm: input.activeForm === undefined ? t.activeForm : String(input.activeForm),
+                  status: asStatus(input.status) ?? t.status,
+                },
+          );
+      } else if (block?.type === "tool_result" && pendingCreates.has(block.tool_use_id)) {
+        const input = pendingCreates.get(block.tool_use_id);
+        pendingCreates.delete(block.tool_use_id);
+        const text = typeof block.content === "string" ? block.content : "";
+        const id = row.toolUseResult?.task?.id ?? /Task #(\w+) created/.exec(text)?.[1];
+        if (id === undefined) continue;
+        const subject = String(input.subject ?? input.content ?? "");
+        tasks = [
+          ...tasks.filter((t) => t.id !== String(id)),
+          { id: String(id), content: subject, activeForm: input.activeForm ? String(input.activeForm) : undefined, status: "pending" },
+        ];
+      }
+    }
+  });
+
+  const result = taskAt > todoAt ? tasks : todo ?? [];
+  planCache.set(transcriptPath, { size: tail.size, tasks: result });
+  return result;
 }
 
 function summarise(tasks) {
@@ -177,7 +276,8 @@ function loadSessions({
   for (const name of names) {
     const state = readStateFile(path.join(stateDir, name));
     if (!state) continue;
-    const tasks = Array.isArray(state.lists.main) ? state.lists.main : [];
+    let tasks = Array.isArray(state.lists.main) ? state.lists.main : [];
+    if (tasks.length === 0) tasks = readPlanFromTranscript(state.transcriptPath);
     const agents = state.agents || {};
     const subagents = Object.entries(state.lists)
       .filter(([key, list]) => key !== "main" && Array.isArray(list) && list.length > 0)
@@ -282,6 +382,7 @@ module.exports = {
   removeClosedSessions,
   loadSessions,
   pickFocused,
+  readPlanFromTranscript,
   readSessionTitle,
   relativeTime,
   primaryList,

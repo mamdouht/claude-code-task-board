@@ -210,6 +210,64 @@ test("subagents: labelled by type, and a session with only a subagent list still
   assert.match(model.tooltipMarkdown(session), /\*\*testing-playwright-jest \(subagent\)\*\* — 1\/2 done/);
 });
 
+test("a missing main list is rebuilt from the transcript (TodoWrite), ignoring subagent lines", () => {
+  const stateDir = scratch("state-backfill");
+  const transcript = path.join(stateDir, "t.jsonl");
+  const todoLine = (todos, extra = {}) =>
+    JSON.stringify({ ...extra, type: "assistant", message: { content: [{ type: "tool_use", id: "x", name: "TodoWrite", input: { todos } }] } });
+  fs.writeFileSync(
+    transcript,
+    [
+      "cut-off-first-line",
+      todoLine([t("Old", "pending")]),
+      todoLine([t("P1", "completed"), t("P2", "in_progress", "Doing P2")]),
+      todoLine([t("Subagent step", "pending")], { isSidechain: true }),
+    ].join("\n"),
+  );
+  writeState(stateDir, "early-plan", {
+    pid: 100,
+    transcriptPath: transcript,
+    lists: { main: [], a1: [t("Sub", "in_progress")] },
+    agents: { a1: { type: "database-postgres" } },
+  });
+  const [session] = model.loadSessions({ stateDir, sessionsDir: "/nonexistent", isAlive: () => true, now });
+  assert.deepEqual(session.tasks.map((x) => [x.content, x.status]), [["P1", "completed"], ["P2", "in_progress"]]);
+  assert.equal(session.subagents[0].type, "database-postgres");
+  assert.equal(model.statusBarText(session), "$(checklist) 1/2 ▸ Doing P2");
+});
+
+test("transcript rebuild replays TaskCreate/TaskUpdate, with the id from the result or its text", () => {
+  const dir = scratch("plan-tasks");
+  const file = path.join(dir, "t.jsonl");
+  const use = (id, name, input) =>
+    JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } });
+  const result = (id, text, toolUseResult) =>
+    JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content: text }] }, toolUseResult });
+  fs.writeFileSync(
+    file,
+    [
+      use("u1", "TaskCreate", { subject: "Survey", activeForm: "Surveying" }),
+      result("u1", "Task #1 created successfully: Survey", { task: { id: "1", subject: "Survey" } }),
+      use("u2", "TaskCreate", { subject: "Delegate", activeForm: "Delegating" }),
+      result("u2", "Task #2 created successfully: Delegate"),
+      use("u3", "TaskUpdate", { taskId: "1", status: "completed" }),
+      use("u4", "TaskUpdate", { taskId: "2", status: "in_progress" }),
+    ].join("\n"),
+  );
+  const plan = model.readPlanFromTranscript(file);
+  assert.deepEqual(plan.map((x) => [x.id, x.content, x.status]), [["1", "Survey", "completed"], ["2", "Delegate", "in_progress"]]);
+  assert.deepEqual(model.readPlanFromTranscript("/nonexistent.jsonl"), []);
+});
+
+test("a main list in the tracker file wins over the transcript", () => {
+  const stateDir = scratch("state-nobackfill");
+  const transcript = path.join(stateDir, "t.jsonl");
+  fs.writeFileSync(transcript, JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "x", name: "TodoWrite", input: { todos: [t("From transcript", "pending")] } }] } }));
+  writeState(stateDir, "has-main", { pid: 100, transcriptPath: transcript, lists: { main: [t("From hook", "pending")] } });
+  const [session] = model.loadSessions({ stateDir, sessionsDir: "/nonexistent", isAlive: () => true, now });
+  assert.equal(session.tasks[0].content, "From hook");
+});
+
 test("isProcessAlive tells this process from a dead PID", () => {
   assert.equal(model.isProcessAlive(process.pid), true);
   assert.equal(model.isProcessAlive(2 ** 22 + 12345), false);
