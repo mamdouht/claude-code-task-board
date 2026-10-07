@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { applyTaskCreate, applyTaskUpdate, outline, toTasks } from '../hooks/register'
+import { applyTaskCreate, applyTaskUpdate, createdIdFromText, outline, toTasks } from '../hooks/register'
 
 const BAND = {
   component: 'AbovePrompt' as const,
@@ -52,6 +52,12 @@ describe('Task tools (TaskCreate / TaskUpdate)', () => {
     expect(outline({ main: tasks }, {}, false)[0]?.text).toBe('Tasks 1/2 ▸ Delegating')
     expect(applyTaskUpdate(tasks, { taskId: '2', status: 'deleted' }).length).toBe(1)
     expect(applyTaskUpdate(tasks, { status: 'completed' })).toEqual(tasks)
+  })
+
+  test("a subagent's result text gives the id; the session-wide numbering is kept", async () => {
+    expect(createdIdFromText('Task #5 created successfully: Scan the folder structure')).toBe('5')
+    expect(createdIdFromText('Updated task #5 status')).toBeUndefined()
+    expect(createdIdFromText(undefined)).toBeUndefined()
   })
 })
 

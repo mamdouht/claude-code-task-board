@@ -38,6 +38,13 @@ export function toTasks(todos: unknown): Task[] {
   }))
 }
 
+// A subagent's TaskCreate result is recorded only as text ("Task #5 created successfully: ...") in
+// its transcript; when the structured id is absent, take it from that text.
+export function createdIdFromText(text: unknown): string | undefined {
+  const match = typeof text === 'string' ? /Task #(\w+) created/.exec(text) : null
+  return match?.[1]
+}
+
 function asStatus(value: unknown): Task['status'] | undefined {
   return value === 'pending' || value === 'in_progress' || value === 'completed' ? value : undefined
 }
@@ -148,7 +155,7 @@ export const register: Register = on => {
     const ran = await next(e)
     if (!('deny' in ran && ran.deny) && !ran.isError) {
       const output = ran.result as { task?: { id?: unknown } } | undefined
-      const createdId = output?.task?.id === undefined ? undefined : String(output.task.id)
+      const createdId = output?.task?.id !== undefined ? String(output.task.id) : createdIdFromText(ran.text)
       await update($, lists, all => {
         const before = all[key] ?? []
         const after = tool === 'TaskCreate' ? applyTaskCreate(before, args, createdId) : applyTaskUpdate(before, args)

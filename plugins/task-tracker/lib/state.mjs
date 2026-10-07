@@ -82,11 +82,19 @@ export function applyTodoWrite(tasks, input) {
 
 // TaskCreate / TaskUpdate are incremental. Their exact payloads were NOT observed in a real
 // transcript when this was written, so field names are read defensively; see DESIGN.md.
+// A subagent's TaskCreate result can arrive as text only: "Task #5 created successfully: ...".
+function idFromText(response) {
+  const text = typeof response === "string" ? response : typeof response?.content === "string" ? response.content : "";
+  const match = /Task #(\w+) created/.exec(text);
+  return match ? match[1] : undefined;
+}
+
 function pickTaskId(input, response) {
   const candidates = [
     response?.task?.id,
     response?.taskId,
     response?.id,
+    idFromText(response),
     input?.taskId,
     input?.id,
   ];

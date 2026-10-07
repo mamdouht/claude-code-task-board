@@ -112,6 +112,12 @@ test("subagent lists record the agent type and are removed on SubagentStop", () 
   assert.equal(handle({ session_id: "sa", hook_event_name: "SubagentStop", agent_id: "never-had-a-list" }), null);
 });
 
+test("a subagent's TaskCreate result given as text still yields the task id", () => {
+  let tasks = applyTaskCreate([], { subject: "Scan" }, "Task #5 created successfully: Scan");
+  tasks = applyTaskUpdate(tasks, { taskId: "5", status: "in_progress" });
+  assert.deepEqual(tasks.map((t) => [t.id, t.status]), [["5", "in_progress"]]);
+});
+
 test("TaskCreate then TaskUpdate tracks one task incrementally", () => {
   let tasks = applyTaskCreate([], { subject: "P1", activeForm: "Doing P1" }, { task: { id: "1" } });
   tasks = applyTaskCreate(tasks, { subject: "P2" }, { task: { id: "2" } });
