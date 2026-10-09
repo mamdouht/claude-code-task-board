@@ -127,6 +127,32 @@ A 60-second grace window (`REMOVE_GRACE_MS`) additionally protects any file upda
 than that from being removed at all, closing the gap between a new session starting and Claude
 Code's registry entry for it actually landing on disk.
 
+## The Codex CLI data path (vscode-extension only)
+
+Unlike the two sources above, OpenAI Codex CLI plans don't go through a hook at all — Codex has no
+plugin system task-tracker could hook into. `vscode-extension/lib/codex.js` reads Codex's own
+session rollout files (`~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl`) directly and converts
+the latest plan-like event in each into the same session shape `lib/model.js` produces
+(`sessionId`, `title`, `cwd`, `updatedAt`, `ended`, `tasks`, `subagents: []`, `summary`), tagged
+`source: "codex"`, so `extension.js` can merge and render both in one tree.
+
+This is reading an **undocumented, unversioned log format** — reverse-engineered from real
+`rollout-*.jsonl` files on one machine (Codex CLI 0.159.2, `cli` and `codex_vscode`
+originators), not a published API, and it can change without notice. The full schema notes (what
+was actually observed vs. assumed) live in the header comment of `lib/codex.js` itself and in
+[`docs/features/vscode-codex-plans.md`](features/vscode-codex-plans.md) — read those before
+touching this code. In short:
+
+- Only two plan-like events were ever found in real files: Plan Mode's `item_completed` /
+  `item.type: "Plan"` (a markdown document, no per-step status), and `update_plan` function calls
+  (which *would* carry per-step status) — the latter was never actually observed and is
+  implemented from Codex's published tool schema alone.
+- "Ended" has no registry to check (unlike Claude Code's `~/.claude/sessions`), so it's
+  approximated from the rollout file's own mtime going 15 minutes idle.
+- Parsing is defensive everywhere a format assumption could be wrong: malformed JSON lines are
+  skipped, an unrecognized plan shape falls through to "no plan" rather than throwing, and an
+  unknown per-step status defaults to `pending`.
+
 ## Reading a session's display name
 
 Claude Code appends `{"type":"ai-title","aiTitle":"...",...}` rows to a session's transcript as it
@@ -157,3 +183,6 @@ than failing loudly.
 - Everything above is read from Claude Code internals that are not a published, versioned API.
   Expect to revisit this document after any Claude Code upgrade that changes session registry
   format, transcript row shapes, or the model allowlist gating `TodoWrite`.
+- The Codex CLI data path (see above) carries the same caveat for Codex: its rollout file format
+  is undocumented and unversioned, and the `update_plan` parsing path in particular has never been
+  exercised against a real file. See [`docs/features/vscode-codex-plans.md`](features/vscode-codex-plans.md).

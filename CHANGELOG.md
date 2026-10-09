@@ -22,6 +22,19 @@ All notable changes to this project are documented in this file. The format foll
 - task-board failed to load on engines that do not know the `session.end` event
   ("`session.end` is not an event"); it now clears on `classic.SessionEnd`.
 
+## [vscode-extension 0.4.0] - 2026-10-08
+
+### Added
+- VS Code extension: also shows plans from the **OpenAI Codex CLI**, read directly from Codex's
+  own session rollout files (`~/.codex/sessions/**/rollout-*.jsonl`) — no plugin or hook needed on
+  the Codex side. New settings `claudeTasks.codexEnabled` (default on) and
+  `claudeTasks.codexSessionsDir`. Each session in the tree is now labeled `Claude` or `Codex`.
+  Codex plans are always flat (no subagent nesting). See
+  [`docs/features/vscode-codex-plans.md`](docs/features/vscode-codex-plans.md) for the schema
+  this is read from and its known approximations.
+- VS Code extension: end-to-end test (`npm run test:e2e`, launches real VS Code via
+  `@vscode/test-electron`); `activate()` now returns `{ getTreeSnapshot() }` as a test hook.
+
 ## [0.1.0] - 2026-10-07
 
 Initial public release.

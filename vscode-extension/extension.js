@@ -5,6 +5,7 @@
 const fs = require("node:fs");
 const vscode = require("vscode");
 const model = require("./lib/model");
+const codex = require("./lib/codex");
 
 const STATUS_ICON = {
   completed: new vscode.ThemeIcon("pass-filled", new vscode.ThemeColor("testing.iconPassed")),
@@ -18,6 +19,8 @@ function config() {
     stateDir: c.get("stateDir") || model.defaultStateDir(),
     currentWorkspaceOnly: c.get("currentWorkspaceOnly", true),
     maxAgeHours: c.get("maxAgeHours", 24),
+    codexEnabled: c.get("codexEnabled", true),
+    codexSessionsDir: c.get("codexSessionsDir") || codex.defaultCodexSessionsDir(),
   };
 }
 
@@ -40,11 +43,15 @@ class TasksProvider {
     const folders = c.currentWorkspaceOnly
       ? (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath)
       : [];
-    this.sessions = model.loadSessions({
-      stateDir: c.stateDir,
-      workspaceFolders: folders,
-      maxAgeMs: c.maxAgeHours > 0 ? c.maxAgeHours * 3600 * 1000 : undefined,
-    });
+    const maxAgeMs = c.maxAgeHours > 0 ? c.maxAgeHours * 3600 * 1000 : undefined;
+    const claudeSessions = model.loadSessions({ stateDir: c.stateDir, workspaceFolders: folders, maxAgeMs });
+    // Codex has no hook of its own: its plans are read straight out of its rollout files (see
+    // lib/codex.js) and merged in here, tagged with `source` so the tree can label where each
+    // session came from.
+    const codexSessions = c.codexEnabled
+      ? codex.loadCodexSessions({ sessionsDir: c.codexSessionsDir, workspaceFolders: folders, maxAgeMs })
+      : [];
+    this.sessions = [...claudeSessions, ...codexSessions].sort((a, b) => b.updatedAt - a.updatedAt);
     const label = activeTabLabel();
     // Only follow tab changes onto Claude session tabs; keep the last match otherwise.
     if (label && this.sessions.some((s) => s.title === label)) this.lastTabLabel = label;
@@ -59,8 +66,8 @@ class TasksProvider {
   getChildren(element) {
     if (!element) {
       if (this.sessions.length === 0) {
-        const empty = new vscode.TreeItem("No Claude task lists yet");
-        empty.description = "they appear when Claude plans multi-step work";
+        const empty = new vscode.TreeItem("No task lists yet");
+        empty.description = "they appear when Claude or Codex plans multi-step work";
         return [empty];
       }
       // Focused session first, the rest newest-first.
@@ -97,7 +104,8 @@ class TasksProvider {
     item.id = `${session.sessionId}:${isFocused ? "f" : "c"}`;
     // A session with no list of its own but a running subagent shows the subagent's progress.
     const { done, total, finished } = model.primaryList(session)?.summary ?? session.summary;
-    item.description = `${done}/${total}${finished ? " done" : ""} · ${model.relativeTime(session.updatedAt)}`;
+    const sourceLabel = session.source === "codex" ? "Codex" : "Claude";
+    item.description = `${done}/${total}${finished ? " done" : ""} · ${sourceLabel} · ${model.relativeTime(session.updatedAt)}`;
     item.iconPath = new vscode.ThemeIcon(finished ? "pass" : isFocused ? "comment-discussion" : "history");
     item.tooltip = new vscode.MarkdownString(model.tooltipMarkdown(session));
     item.kind = "session";
@@ -158,16 +166,43 @@ function activate(context) {
   };
   watch();
 
+  // Codex rollouts live three directories down (~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl), so
+  // a non-recursive watch on the top folder alone would miss new files. `recursive` only works on
+  // macOS and Windows — it throws on Linux — so this is best-effort; the 10 s poll tick below is
+  // the fallback everywhere, including when the directory doesn't exist yet. Unlike the Claude
+  // state dir, it is never created here — it isn't ours to create.
+  let codexWatcher;
+  const watchCodex = () => {
+    codexWatcher?.close();
+    codexWatcher = undefined;
+    const c = config();
+    if (!c.codexEnabled) return;
+    try {
+      codexWatcher = fs.watch(c.codexSessionsDir, { recursive: true }, scheduleRender);
+    } catch {
+      codexWatcher = undefined;
+    }
+  };
+  watchCodex();
+
   // Closing a Claude tab may write nothing we watch, so poll the session registry too.
-  // Also keeps "3m ago" honest and covers a dead watcher.
+  // Also keeps "3m ago" honest and covers a dead watcher (e.g. the Codex one on Linux).
   const tick = setInterval(render, 10_000);
   context.subscriptions.push(
-    { dispose: () => { clearInterval(tick); clearTimeout(timer); watcher?.close(); } },
+    {
+      dispose: () => {
+        clearInterval(tick);
+        clearTimeout(timer);
+        watcher?.close();
+        codexWatcher?.close();
+      },
+    },
     vscode.window.tabGroups.onDidChangeTabs(scheduleRender),
     vscode.window.tabGroups.onDidChangeTabGroups(scheduleRender),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (!e.affectsConfiguration("claudeTasks")) return;
       watch();
+      watchCodex();
       render();
     }),
     vscode.commands.registerCommand("claudeTasks.refresh", render),
@@ -180,6 +215,25 @@ function activate(context) {
     }),
   );
   render();
+
+  // Test hook (used by test-e2e/): a plain-data snapshot of what the tree view renders, since a
+  // tree view's contents cannot be read from outside the extension. Not a public API.
+  return {
+    getTreeSnapshot() {
+      return provider
+        .getChildren()
+        .filter((item) => item.kind === "session")
+        .map((item) => ({
+          label: item.label,
+          description: item.description,
+          source: item.session.source,
+          tasks: provider
+            .getChildren(item)
+            .filter((c) => c.kind === "task")
+            .map((c) => ({ label: c.label, icon: c.iconPath.id })),
+        }));
+    },
+  };
 }
 
 function deactivate() {}

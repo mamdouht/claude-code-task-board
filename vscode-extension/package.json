@@ -2,7 +2,7 @@
   "name": "task-board-vscode",
   "displayName": "Task Board for Claude Code",
   "description": "Shows Claude Code's task lists — and each subagent's, nested — in a sidebar view and the status bar, beside the Claude chat panel.",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "publisher": "opstudioz",
   "license": "MIT",
   "engines": {
@@ -17,6 +17,7 @@
   ],
   "scripts": {
     "test": "node --test test/",
+    "test:e2e": "node test-e2e/run.js",
     "package": "npx --yes @vscode/vsce@3 package --no-dependencies --allow-missing-repository --readme-path media/vsix-readme.md -o dist/task-board-vscode.vsix"
   },
   "contributes": {
@@ -88,6 +89,16 @@
           "type": "string",
           "default": "",
           "description": "Directory of task-tracker state files. Empty = ~/.claude/task-tracker."
+        },
+        "claudeTasks.codexEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also show plans from the OpenAI Codex CLI, read directly from its session rollout files."
+        },
+        "claudeTasks.codexSessionsDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory of Codex CLI rollout session files. Empty = ~/.codex/sessions."
         }
       }
     }
@@ -102,5 +113,8 @@
     "tasks",
     "todo",
     "ai agents"
-  ]
+  ],
+  "devDependencies": {
+    "@vscode/test-electron": "^3.1.0"
+  }
 }

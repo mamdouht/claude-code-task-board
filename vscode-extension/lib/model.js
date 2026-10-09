@@ -298,6 +298,7 @@ function loadSessions({
       tasks,
       subagents,
       summary: summarise(tasks),
+      source: "claude",
     });
   }
   return sessions.sort((a, b) => b.updatedAt - a.updatedAt);

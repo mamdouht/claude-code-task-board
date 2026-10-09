@@ -16,9 +16,14 @@ relative links once it's packaged. This one is for the GitHub repo.
 
 - **Claude Tasks** activity-bar view: every session with an active task list, the one matching
   your focused Claude chat tab on top and expanded, the rest newest-first and collapsed. Each
-  shows `done/total · relative time`; expanding it shows the task rows (✅ done, ⏳ in progress,
-  ⬜ pending) and any running subagent, nested and labeled `<type> (subagent)`, expanded by
-  default while it's active.
+  shows `done/total · Claude · relative time`; expanding it shows the task rows (✅ done, ⏳ in
+  progress, ⬜ pending) and any running subagent, nested and labeled `<type> (subagent)`, expanded
+  by default while it's active.
+- Also shows plans from the **OpenAI Codex CLI** (`done/total · Codex · relative time`), read
+  directly from Codex's own `~/.codex/sessions/**/rollout-*.jsonl` files — no plugin or hook
+  needed on the Codex side. Codex plans are always flat (no subagent nesting). Turn this off with
+  `claudeTasks.codexEnabled`. See [`docs/features/vscode-codex-plans.md`](../docs/features/vscode-codex-plans.md)
+  for the schema this is read from and its known approximations.
 - A **status bar item** mirroring whichever list is currently focused — the session's own, or a
   running subagent's if the session has none of its own right now — with a small robot icon when
   it's following a subagent.
@@ -53,6 +58,8 @@ Then run **Developer: Reload Window** in VS Code (reloads only that window). You
 | `claudeTasks.currentWorkspaceOnly` | `true` | Only show sessions whose working directory is inside a currently open workspace folder. |
 | `claudeTasks.maxAgeHours` | `24` | Hide a session once its task list has gone this many hours without an update. `0` = never hide. |
 | `claudeTasks.stateDir` | `""` | Where to read `task-tracker`'s files from. Empty means `~/.claude/task-tracker`. |
+| `claudeTasks.codexEnabled` | `true` | Also show plans from the OpenAI Codex CLI, read directly from its session rollout files. |
+| `claudeTasks.codexSessionsDir` | `""` | Directory of Codex CLI rollout session files. Empty means `~/.codex/sessions`. |
 
 ## Limits
 
@@ -64,12 +71,28 @@ Then run **Developer: Reload Window** in VS Code (reloads only that window). You
   the Limitations section of the [root README](../README.md#limitations--caveats) for the honest
   list of what this depends on and what can go wrong.
 - Tested on macOS and Linux; Windows is untested.
+- Codex support reads an **undocumented, unversioned file format** reverse-engineered from real
+  rollout files on one machine — it can change without notice. "Ended" is approximated from file
+  idle time (no liveness registry like Claude Code's); a Plan Mode plan (the only plan source ever
+  actually observed) carries no per-step status, so every step shows pending until Codex's
+  `task_complete` for that plan arrives, then all of them flip to completed together. The
+  `update_plan` tool (which would give real per-step status) has never been observed in practice —
+  its parsing is implemented from Codex's tool schema, not a confirmed example. Full detail in
+  [`docs/features/vscode-codex-plans.md`](../docs/features/vscode-codex-plans.md).
 
 ## Development
 
 ```bash
-npm test   # node --test test/
+npm test           # node --test test/ (unit tests, no VS Code needed)
+npm run test:e2e   # launches a real VS Code with the extension loaded (see below)
 ```
 
-`lib/model.js` is the entire data layer and has no `vscode` import, so it's plain-Node testable;
-`extension.js` is just VS Code glue on top of it.
+Running the e2e test: it downloads VS Code into `.vscode-test/` on first run (needs network),
+then opens it against synthetic Claude/Codex fixtures in a temp dir (`test-e2e/`; your real
+`~/.claude` and `~/.codex` are never read) and asserts what the Claude Tasks tree shows. It reads
+the tree through the `getTreeSnapshot()` test hook that `activate()` returns. Not packaged in the
+`.vsix`.
+
+`lib/model.js` is the data layer for Claude/task-tracker sessions and `lib/codex.js` is the data
+layer for Codex CLI sessions — neither has a `vscode` import, so both are plain-Node testable;
+`extension.js` is just VS Code glue on top of them.

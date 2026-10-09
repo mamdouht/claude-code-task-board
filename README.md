@@ -25,7 +25,7 @@ Four independent components, installed separately, each solving one part of "whe
 | **task-board** | A Claude Code *mod* — in-process function hooks (`plugins/task-board/hooks/register.tsx`) | A band above the prompt, plus a `/task-board` pane. **Terminal only** (including VS Code's and JetBrains' integrated terminals) and the Claude Desktop app's Code tab. |
 | **task-tracker** | A Claude Code *plugin* — classic settings hooks (`plugins/task-tracker/hooks/hooks.json`) | Nowhere by itself. It writes each session's task list to `~/.claude/task-tracker/<session_id>.json` so something else can read it. |
 | **statusline** | A standalone bash script (`statusline/task-statusline.sh`) + `install.sh` | Claude Code's status line: `Opus 5.5 · my-repo · ✓ 3/7 ▸ Writing the hook`. Terminal. Needs no plugin and no node — it reads the session transcript directly. |
-| **vscode-extension** ("Task Board for Claude Code") | A standalone VS Code extension (`vscode-extension/`) | A "Claude Tasks" sidebar view and a status bar item. Reads task-tracker's files — **requires task-tracker to be installed too.** |
+| **vscode-extension** ("Task Board for Claude Code") | A standalone VS Code extension (`vscode-extension/`) | A "Claude Tasks" sidebar view and a status bar item. Reads task-tracker's files — **requires task-tracker to be installed too.** Also shows plans from the **OpenAI Codex CLI**, read directly from Codex's own session files — no plugin or hook needed for that part. |
 
 You can install task-board or the status line on their own for terminal/Desktop use. The VS Code sidebar needs both
 task-tracker (to produce the data) and the extension (to display it).
@@ -41,6 +41,10 @@ task-tracker (to produce the data) and the extension (to display it).
   anything to show until it's turned on (see Install, step 2). Where Claude Code uses the newer
   **Task tools** instead (`TaskCreate`/`TaskUpdate` — the Desktop app does), everything here reads
   those too.
+- **Optional:** the vscode-extension also shows plans from the **OpenAI Codex CLI** — no
+  install step needed beyond having used Codex CLI at least once (it reads
+  `~/.codex/sessions/**/rollout-*.jsonl` directly). Turn it off with `claudeTasks.codexEnabled`
+  if you don't use Codex.
 
 ## Install
 
@@ -125,14 +129,17 @@ outline in a pane beside the transcript, already fully expanded — useful once 
 hides something ("… N more (/task-board)").
 
 **In VS Code:** open the **Claude Tasks** icon in the activity bar. It lists every session with an
-active task list — the one matching your focused Claude chat tab on top and expanded, the rest
-collapsed and sorted newest-first. Each session shows `done/total · relative time`; expand it for
-the task rows (✅ done, ⏳ in progress, ⬜ pending) and any nested subagent group, labeled `<type>
-(subagent)` and expanded automatically while running. The status bar mirrors whichever list is
-currently focused — your own session's, or a running subagent's if the session itself has none
-right now — with a small robot icon when it's a subagent's. You can drag the "Claude Tasks" view
-out of the activity bar into the secondary sidebar or the bottom panel if you'd rather keep it
-there. The view's badge count is how many sessions still have unfinished work.
+active task list — Claude Code sessions (via task-tracker) and, if you use it, Codex CLI sessions
+with a plan — the one matching your focused Claude chat tab on top and expanded, the rest
+collapsed and sorted newest-first. Each session shows `done/total · Claude · relative time` or
+`done/total · Codex · relative time` so you can tell the two apart; expand it for the task rows
+(✅ done, ⏳ in progress, ⬜ pending) and any nested subagent group, labeled `<type> (subagent)` and
+expanded automatically while running (Codex plans are flat — never nested). The status bar mirrors
+whichever list is currently focused — your own session's, or a running subagent's if the session
+itself has none right now — with a small robot icon when it's a subagent's. You can drag the
+"Claude Tasks" view out of the activity bar into the secondary sidebar or the bottom panel if
+you'd rather keep it there. The view's badge count is how many sessions still have unfinished
+work.
 
 Note: the VS Code *extension* runs independently of Claude Code's own VS Code integration. If
 you're chatting with Claude inside VS Code's built-in chat panel, that panel is a separate,
@@ -180,6 +187,12 @@ flowchart LR
   It watches the state directory (`fs.watch`, debounced ~150ms) and also polls every 10 seconds,
   because closing a Claude tab doesn't necessarily touch the file.
 
+**Codex CLI plans are a third, independent path**, with no hook or plugin involved at all:
+`vscode-extension/lib/codex.js` reads OpenAI Codex CLI's own session rollout files
+(`~/.codex/sessions/**/rollout-*.jsonl`) directly and merges them into the same tree, tagged
+`source: "codex"`. See [`docs/features/vscode-codex-plans.md`](docs/features/vscode-codex-plans.md)
+for the full schema notes and the approximations that implies.
+
 See [`docs/how-it-works.md`](docs/how-it-works.md) for the full state file contract and the
 reasoning behind each signal — useful if you're extending this rather than just using it.
 
@@ -193,6 +206,8 @@ Claude Tasks):
 | `claudeTasks.currentWorkspaceOnly` | `true` | Only show sessions whose working directory is inside a currently open workspace folder. |
 | `claudeTasks.maxAgeHours` | `24` | Hide a session once its task list has gone this many hours without an update. `0` = never hide. |
 | `claudeTasks.stateDir` | `""` | Where to read task-tracker's files from. Empty means `~/.claude/task-tracker`. |
+| `claudeTasks.codexEnabled` | `true` | Also show plans from the OpenAI Codex CLI, read directly from its session rollout files. |
+| `claudeTasks.codexSessionsDir` | `""` | Directory of Codex CLI rollout session files. Empty means `~/.codex/sessions`. |
 
 task-tracker itself has one override, read from the environment rather than a setting:
 `TASK_TRACKER_DIR` — point it elsewhere if `~/.claude/task-tracker` doesn't suit you (e.g. a
@@ -270,6 +285,17 @@ Read this before relying on any of it for something important:
 - The vscode-extension has been tested on macOS and Linux. Windows is untested.
 - Everything stays local. State files contain your task text in plain JSON on disk — nothing is
   sent anywhere by any of these three components.
+- **Codex CLI support is read from an undocumented, unversioned file format** (Codex's own
+  rollout `.jsonl` files), reverse-engineered from real files on one machine (Codex CLI 0.159.2) —
+  not a published contract, and it can change without notice. Two further approximations worth
+  knowing: a Codex session is only considered "ended" once its rollout file has gone 15 minutes
+  without being touched (there's no liveness registry like Claude Code's to check instead); and a
+  Plan Mode plan (markdown with no per-step status) shows every line as pending until Codex's
+  `task_complete` event for that plan's turn arrives, at which point *all* of its lines flip to
+  completed together — never partially. Codex's `update_plan` tool (which does carry per-step
+  status) was never observed in real local history; its parsing is implemented from Codex's own
+  published tool schema, not from a confirmed example. See
+  [`docs/features/vscode-codex-plans.md`](docs/features/vscode-codex-plans.md) for the full detail.
 
 ## Development
 
@@ -278,7 +304,7 @@ scripts/test-all.sh
 ```
 
 Runs, in order: `node --test` for task-tracker's hook, `node --test` for the vscode-extension's
-model layer, `statusline/test/run.sh` (plain bash), then — only if a `claude` CLI ≥ 2.1.287 is on `PATH` (override with `CLAUDE_BIN`) —
+model and Codex layers, `statusline/test/run.sh` (plain bash), then — only if a `claude` CLI ≥ 2.1.287 is on `PATH` (override with `CLAUDE_BIN`) —
 `claude plugin validate` on the marketplace root and both plugins, and `claude plugin test` for
 the task-board mod. CI (`.github/workflows/test.yml`) runs the two `node --test` suites and the
 status-line tests;
@@ -289,10 +315,11 @@ the plugin-validation and mod-test steps need the Claude Code CLI and are local-
 | `.claude-plugin/marketplace.json` | The `task-board-suite` marketplace definition both plugins are installed from. |
 | `plugins/task-board/` | The mod: `hooks/register.tsx` (logic + UI), `hooks/hooks.json`, `types/index.d.ts`, `tests/`. |
 | `plugins/task-tracker/` | The plugin: `hooks/hooks.json`, `hook/task-tracker-hook.mjs` (entry point), `lib/state.mjs` (state file contract), `run.sh` (node launcher), `test/`. |
-| `vscode-extension/` | The extension: `extension.js` (VS Code glue), `lib/model.js` (pure, unit-tested data layer), `package.json`, `test/`, `media/`. |
+| `vscode-extension/` | The extension: `extension.js` (VS Code glue), `lib/model.js` (pure, unit-tested data layer for Claude/task-tracker sessions), `lib/codex.js` (pure, unit-tested data layer for Codex CLI sessions), `package.json`, `test/`, `media/`. |
 | `statusline/` | `task-statusline.sh` (the status line), `install.sh`, `test/run.sh`. |
 | `scripts/` | `enable-todo-tool.sh`, `test-all.sh`. |
 | `docs/how-it-works.md` | The state file contract and design rationale, for contributors. |
+| `docs/features/` | Feature briefs with full AI-resumption context. |
 | `docs/release-notes/` | Dated release notes. |
 
 ## License
