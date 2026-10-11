@@ -322,6 +322,17 @@ the plugin-validation and mod-test steps need the Claude Code CLI and are local-
 | `docs/features/` | Feature briefs with full AI-resumption context. |
 | `docs/release-notes/` | Dated release notes. |
 
+##Screenshots
+VS Code extension
+Multiple Sessions
+<img width="825" height="443" alt="image" src="https://github.com/user-attachments/assets/18fa6061-5abe-4cf0-801a-b1098f381241" />
+With Sub Agents
+<img width="307" height="777" alt="Screenshot 2026-10-07 at 1 07 15 AM" src="https://github.com/user-attachments/assets/006888f2-67a0-4af6-81dc-5f7c950c0800" />
+
+VS Code Status bar
+<img width="572" height="34" alt="image" src="https://github.com/user-attachments/assets/f404130a-b592-4291-8f15-23b794894209" />
+
+
 ## License
 
 [MIT](LICENSE) — Copyright (c) 2026 Mamdouh.
